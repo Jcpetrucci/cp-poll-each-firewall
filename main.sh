@@ -1,0 +1,32 @@
+#!/bin/bash
+# Poll each firewall managed by this device and retrieve the installed policy name / date -- John C. Petrucci
+
+hr(){
+  printf '%*s\n' "${1-50}" | sed 's/ /=/g'
+}
+
+. /opt/CPshared/5.0/tmp/.CPprofile.sh # Source Check Point environment variables
+mdsenv && mcd > /dev/null 2>&1 # Begin in MDS context
+
+for customer in $MDSDIR/customers/*; do
+  customer="${customer##*/}" # Convert directory path to customer name (last chunk)
+  mdsenv $customer > /dev/null 2>&1 || { printf 'Unable to "mdsenv" as "%s".\n' $customer >&2; exit 1; }
+  mcd > /dev/null 2>&1 || { printf 'Unable to "mcd" as "%s".\n' $customer >&2; exit 1; }
+  printf '\nGateways on %s:\n' "$customer"
+  hr # Horizontal separator
+  while read -r resp_name resp_ipaddr resp_swver resp_platform; do
+    (( responses == 0 )) && printf '%s %s %s %s %s\n' name ipaddr swver platform policy # Print header on first line only
+    #policy_version="$(cpstat fw -h ${resp_name:-NULL} -f policy 2>&1 | awk '/Policy name:/{print $NF}')"
+    policy_time="$(cpstat fw -h ${resp_name:-NULL} -f policy 2>&1 | grep -Eo 'Policy install time:.*' | cut -d ' ' -f 4- | sed 's/ /_/g' )" # Secondary query using `cpstat' to find policy information.
+    printf '%s %s %s %s %s\n' "$resp_name" "$resp_ipaddr" "$resp_swver" "$resp_platform" "${policy_time:-ERROR}"
+    (( responses ++ )) # Increment response counter so that headers do not print again
+  done < <(cpmiquerybin attr "" network_objects \
+    "connection_state='communicating' & \
+      (\
+      type='gateway' | \
+      type='gateway_cluster' | \
+      type='cluster_member' & ! vs_cluster_member='true' \
+      ) | \
+    vs_cluster_netobj='true'" \
+    -a __name__,ipaddr,svn_version_name,appliance_type) | column -t
+done
