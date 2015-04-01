@@ -15,10 +15,10 @@ for customer in $MDSDIR/customers/*; do
   printf '\nGateways on %s:\n' "$customer"
   hr # Horizontal separator
   while read -r resp_name resp_ipaddr resp_swver resp_platform; do
-    (( responses == 0 )) && printf '%s %s %s %s %s\n' name ipaddr swver platform policy # Print header on first line only
-    #policy_version="$(cpstat fw -h ${resp_name:-NULL} -f policy 2>&1 | awk '/Policy name:/{print $NF}')"
-    policy_time="$(cpstat fw -h ${resp_name:-NULL} -f policy 2>&1 | grep -Eo 'Policy install time:.*' | cut -d ' ' -f 4- | sed 's/ /_/g' )" # Secondary query using `cpstat' to find policy information.
-    printf '%s %s %s %s %s\n' "$resp_name" "$resp_ipaddr" "$resp_swver" "$resp_platform" "${policy_time:-ERROR}"
+    (( responses == 0 )) && printf '%s; %s; %s; %s; %s; %s\n' Name IP Version Platform 'Policy Name' 'Policy Install Date' # Print header on first line only
+    policy_name="$(cpstat fw -h ${resp_name:-NULL} -f policy 2>&1 | awk '/Policy name:/{print $NF}')" # Secondary query using `cpstat' to find policy information.
+    policy_time="$(cpstat fw -h ${resp_name:-NULL} -f policy 2>&1 | sed -n -r 's/Policy install time: +(.*)/\1/p')"
+    printf '%s; %s; %s; %s; %s; %s\n' "$resp_name" "$resp_ipaddr" "$resp_swver" "$resp_platform" "${policy_name:-ERROR}" "${policy_time:-ERROR}"
     (( responses ++ )) # Increment response counter so that headers do not print again
   done < <(cpmiquerybin attr "" network_objects \
     "connection_state='communicating' & \
@@ -28,5 +28,5 @@ for customer in $MDSDIR/customers/*; do
       type='cluster_member' & ! vs_cluster_member='true' \
       ) | \
     vs_cluster_netobj='true'" \
-    -a __name__,ipaddr,svn_version_name,appliance_type) | column -t
+    -a __name__,ipaddr,svn_version_name,appliance_type) | column -t -s ';'
 done
